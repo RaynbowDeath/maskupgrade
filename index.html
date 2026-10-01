@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shining Mask Remote</title>
+<style>
+:root{
+  /* Layout: one-column control deck sized for a phone; the LED panel preview anchors the custom-animation card */
+  --bg:#eceff4; --surface:#ffffff; --ink:#131722; --muted:#5a6376; --line:#d7dce5;
+  --accent:#cf2f68; --accent-ink:#ffffff; --accent-soft:#f8e2eb;
+  --panel:#06070a; --panel-off:#17191f;
+  --ok:#17875a; --warn:#9a6210; --err:#c23030;
+  --font-ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --r:14px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1015; --surface:#151920; --ink:#e6e9ef; --muted:#97a0b1; --line:#272d38;
+    --accent:#ff5b91; --accent-ink:#1b0710; --accent-soft:#3b1726;
+    --panel:#040507; --panel-off:#13151b;
+    --ok:#39c98a; --warn:#e2a23a; --err:#ff6a6a;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1015; --surface:#151920; --ink:#e6e9ef; --muted:#97a0b1; --line:#272d38;
+  --accent:#ff5b91; --accent-ink:#1b0710; --accent-soft:#3b1726;
+  --panel:#040507; --panel-off:#13151b;
+  --ok:#39c98a; --warn:#e2a23a; --err:#ff6a6a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font-ui);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:18px 48px;display:grid;gap:14px}
+h1,h2{margin:0;text-wrap:balance}
+h1{font-size:1.35rem;letter-spacing:-.01em}
+h2{font-size:1.02rem}
+code{font-family:var(--font-mono);font-size:.9em}
+a{color:var(--accent)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sub{margin:2px 0 0;color:var(--muted);font:12px/1.3 var(--font-mono);letter-spacing:.04em;text-transform:uppercase}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface);font-size:13px;font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.chip[data-state="on"]::before{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+.chip[data-state="busy"]::before{background:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;min-width:0}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.count{font:13px var(--font-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.hint{margin:0;color:var(--muted);font-size:13.5px}
+.banner{border-radius:var(--r);padding:12px 14px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);font-size:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 15px var(--font-ui);
+  padding:11px 16px;border-radius:11px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.linkbtn:focus-visible,.step button:focus-visible,.seg label:focus-within,.thumb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.linkbtn{appearance:none;border:0;background:none;color:var(--accent);font:600 13.5px var(--font-ui);padding:2px 0;cursor:pointer;justify-self:start;text-align:left}
+.linkbtn:disabled{color:var(--muted);cursor:not-allowed}
+.field{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+.field>span{font-size:14px;font-weight:600}
+.field output,.num{font:600 14px var(--font-mono);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right}
+input[type=range]{width:100%;accent-color:var(--accent);min-height:32px}
+input[type=number]{font:600 15px var(--font-mono);width:5.5em;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.steps{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.step{display:grid;gap:6px;border:1px solid var(--line);border-radius:12px;padding:10px}
+.step .lbl{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.step .ctl{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:6px}
+.step button{height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:700 20px var(--font-ui);cursor:pointer}
+.step button:disabled{opacity:.45;cursor:not-allowed}
+.step .n{text-align:center;font:700 20px var(--font-mono);font-variant-numeric:tabular-nums}
+.stage{position:relative;background:var(--panel);border-radius:12px;display:grid;place-items:center;padding:14px}
+#preview{width:min(100%,276px);height:auto;aspect-ratio:46/58;max-width:100%;display:block}
+.tag{position:absolute;top:10px;left:10px;font:600 11px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;
+  color:#e9ecf2;background:rgba(255,255,255,.12);padding:4px 8px;border-radius:6px}
+.dims{position:absolute;bottom:10px;right:10px;font:11px var(--font-mono);color:rgba(233,236,242,.6);font-variant-numeric:tabular-nums}
+.strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;min-width:0}
+.thumb{position:relative;flex:none;width:58px;border-radius:8px;border:2px solid transparent;background:var(--panel);padding:4px;cursor:pointer}
+.thumb[aria-current="true"]{border-color:var(--accent)}
+.thumb canvas{width:100%;height:auto;aspect-ratio:46/58;display:block;image-rendering:pixelated}
+.thumb .i{position:absolute;left:4px;bottom:3px;font:600 10px var(--font-mono);color:#e9ecf2;background:rgba(0,0,0,.55);padding:0 4px;border-radius:4px}
+.thumb .x{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:700 14px/1 var(--font-ui);cursor:pointer;display:grid;place-items:center}
+.file{position:relative;overflow:hidden}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+details.opts{border-top:1px solid var(--line);padding-top:10px}
+details summary{cursor:pointer;font-weight:600;font-size:14px}
+.optgrid{display:grid;gap:10px;margin-top:10px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.check input{margin-top:3px;accent-color:var(--accent);width:18px;height:18px;flex:none}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:11px;padding:3px;background:var(--bg)}
+.seg label{text-align:center;padding:9px 6px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.12);color:var(--accent)}
+.progress{display:grid;gap:6px}
+.bar{height:8px;border-radius:99px;background:var(--bg);overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s linear}
+#progText{font:13px var(--font-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.status{font-size:13.5px;color:var(--muted);min-height:1.2em;margin:0}
+.status[data-kind="ok"]{color:var(--ok)}
+.status[data-kind="err"]{color:var(--err)}
+.status[data-kind="warn"]{color:var(--warn)}
+details.log summary{font-size:1.02rem}
+#log{margin:0;max-height:300px;overflow:auto;font:11.5px/1.5 var(--font-mono);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-all}
+.foot{color:var(--muted);font-size:12.5px;text-align:center}
+@media (max-width:380px){.steps{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Shining Mask Remote</h1>
+      <p class="sub">46 × 58 LEDs · Bluetooth LE</p>
+    </div>
+    <span id="connChip" class="chip" data-state="off" role="status">Not connected</span>
+  </header>
+
+  <div id="envBanner" class="banner" hidden></div>
+
+  <section class="card">
+    <button id="btnConnect" class="btn primary wide">Connect to mask</button>
+    <p class="hint">Close the official Shining Mask app first. The mask accepts one connection at a time. In the picker, choose the device named <code>MASK-…</code>.</p>
+    <div class="row">
+      <button id="btnConnectAll" class="linkbtn">Mask not listed? Show all nearby devices</button>
+      <button id="btnDisconnect" class="linkbtn" hidden>Disconnect</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Built-in faces</h2>
+    <label class="field" for="light"><span>Brightness</span><input type="range" id="light" min="0" max="100" value="60" data-needs-conn><output id="lightOut" for="light">60</output></label>
+    <div class="steps">
+      <div class="step">
+        <span class="lbl">Image</span>
+        <div class="ctl"><button data-kind="IMAG" data-d="-1" aria-label="Previous image" data-needs-conn>−</button><span class="n" id="imagN">1</span><button data-kind="IMAG" data-d="1" aria-label="Next image" data-needs-conn>+</button></div>
+      </div>
+      <div class="step">
+        <span class="lbl">Animation</span>
+        <div class="ctl"><button data-kind="ANIM" data-d="-1" aria-label="Previous animation" data-needs-conn>−</button><span class="n" id="animN">1</span><button data-kind="ANIM" data-d="1" aria-label="Next animation" data-needs-conn>+</button></div>
+      </div>
+    </div>
+    <p class="hint">Each tap shows that preset on the mask.</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Custom animation</h2><span id="frameCount" class="count">0 / 20 frames</span></div>
+    <div class="stage">
+      <canvas id="preview" width="276" height="348" aria-label="Preview of the frames as they will look on the mask"></canvas>
+      <span id="sampleTag" class="tag">Sample frames</span>
+      <span class="dims" id="dims">frame 1</span>
+    </div>
+    <div id="strip" class="strip" aria-label="Frames"></div>
+    <div class="two">
+      <label class="btn file">Add images or GIF<input type="file" id="fileIn" accept="image/*" multiple></label>
+      <button id="btnClearFrames" class="btn">Clear frames</button>
+    </div>
+    <p class="hint">Up to 20 frames, the mask's custom-image limit. A GIF is split into frames; long GIFs are sampled evenly.</p>
+    <details class="opts" id="optsBox">
+      <summary>Picture options</summary>
+      <div class="optgrid">
+        <div class="seg" role="radiogroup" aria-label="Fit">
+          <label><input type="radio" name="fit" value="contain" checked>Fit whole picture</label>
+          <label><input type="radio" name="fit" value="cover">Fill the panel</label>
+        </div>
+        <label class="check"><input type="checkbox" id="knockout" checked>Turn white backgrounds black (LEDs off)</label>
+        <label class="check"><input type="checkbox" id="flip">Mirror left–right (use if the mask shows images reversed)</label>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>1 · Send frames to the mask</h2>
+    <label class="check"><input type="checkbox" id="replace" checked>Delete the custom images already on the mask first, so these frames become slots 1 to N</label>
+    <button id="btnSend" class="btn primary wide" data-needs-conn>Send frames</button>
+    <div id="progress" class="progress" hidden>
+      <div class="bar"><i id="bar"></i></div>
+      <span id="progText"></span>
+    </div>
+    <p class="hint">About 3 to 5 seconds per frame. Keep the phone close to the mask.</p>
+  </section>
+
+  <section class="card">
+    <h2>2 · Play</h2>
+    <label class="field" for="onMask"><span>Frames on the mask</span><span></span><input type="number" id="onMask" min="1" max="20" value="0"></label>
+    <div class="seg" role="radiogroup" aria-label="Playback">
+      <label><input type="radio" name="mode" value="mask" checked>Loop on the mask</label>
+      <label><input type="radio" name="mode" value="phone">Drive from phone</label>
+    </div>
+    <div id="paneMask" class="optgrid">
+      <label class="field" for="speed"><span>Mask speed</span><input type="range" id="speed" min="1" max="255" value="20"><output id="speedOut" for="speed">20</output></label>
+      <p class="hint">The mask keeps looping after you disconnect. The speed number is the mask's own setting; try a few values.</p>
+      <button id="btnLoop" class="btn primary wide" data-needs-conn>Start loop on mask</button>
+    </div>
+    <div id="panePhone" class="optgrid" hidden>
+      <label class="field" for="fps"><span>Frames per second</span><input type="range" id="fps" min="1" max="12" value="6"><output id="fpsOut" for="fps">6</output></label>
+      <p class="hint">Exact timing, but the phone must stay connected and nearby. The screen stays on while playing.</p>
+      <button id="btnLive" class="btn primary wide" data-needs-conn>Start playing</button>
+    </div>
+    <p id="playStatus" class="status" aria-live="polite"></p>
+    <button id="btnCheck" class="linkbtn" data-needs-conn>Ask the mask how many custom images it holds</button>
+  </section>
+
+  <details class="card log" id="logBox">
+    <summary>Connection log</summary>
+    <p class="hint">If something doesn't work, copy this and send it over.</p>
+    <div class="row"><button id="btnCopyLog" class="btn">Copy log</button><button id="btnClearLog" class="btn">Clear</button></div>
+    <pre id="log" tabindex="0"></pre>
+  </details>
+
+  <p class="foot">Protocol from <a href="https://github.com/GoneUp/mask-go" target="_blank" rel="noopener">mask-go</a>, <a href="https://github.com/bishopfox/shining-mask" target="_blank" rel="noopener">Bishop Fox</a> and <a href="https://github.com/Weavel44/ShinningGlasses" target="_blank" rel="noopener">ShinningGlasses</a>.</p>
+</div>
+
+<script>
+// ==CORE START==
+const W = 46, H = 58, FRAME_BYTES = W * H * 3;       // 8004 bytes per frame
+const MAX_FRAMES = 20;
+const UUID = {
+  svc:    '0000fff0-0000-1000-8000-00805f9b34fb',
+  cmd:    'd44bc439-abfd-45a2-b575-925416129600',
+  notify: 'd44bc439-abfd-45a2-b575-925416129601',
+  data:   'd44bc439-abfd-45a2-b575-92541612960a',
+};
+const BF_DATCP = [0xff, 0xf9, 0xc5, 0x07];          // DATCP tail seen in the Bishop Fox capture
+
+function hexToBytes(h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; }
+function toHex(u) { return Array.from(u, b => b.toString(16).padStart(2, '0')).join(''); }
+
+const Aes128 = (() => {
+  const KEY = hexToBytes('32672f7974ad43451d9c6c894a0e8764');
+  const S = new Uint8Array(256), Si = new Uint8Array(256);
+  const rotl8 = (x, s) => ((x << s) | (x >>> (8 - s))) & 0xff;
+  let p = 1, q = 1;
+  do {
+    p = (p ^ (p << 1) ^ (p & 0x80 ? 0x1b : 0)) & 0xff;
+    q ^= q << 1; q ^= q << 2; q ^= q << 4; q &= 0xff;
+    if (q & 0x80) q ^= 0x09;
+    const x = (q ^ rotl8(q, 1) ^ rotl8(q, 2) ^ rotl8(q, 3) ^ rotl8(q, 4) ^ 0x63) & 0xff;
+    S[p] = x; Si[x] = p;
+  } while (p !== 1);
+  S[0] = 0x63; Si[0x63] = 0;
+  const xt = b => ((b << 1) ^ (b & 0x80 ? 0x1b : 0)) & 0xff;
+  const mul = (a, b) => { let r = 0; while (b) { if (b & 1) r ^= a; a = xt(a); b >>= 1; } return r; };
+  const rk = new Uint8Array(176); rk.set(KEY);
+  for (let i = 16, rcon = 1; i < 176; i += 4) {
+    let t = [rk[i - 4], rk[i - 3], rk[i - 2], rk[i - 1]];
+    if (i % 16 === 0) { t = [S[t[1]] ^ rcon, S[t[2]], S[t[3]], S[t[0]]]; rcon = xt(rcon); }
+    for (let j = 0; j < 4; j++) rk[i + j] = rk[i - 16 + j] ^ t[j];
+  }
+  const addRK = (s, r) => { for (let i = 0; i < 16; i++) s[i] ^= rk[r * 16 + i]; };
+  const shift = s => { const t = s.slice(); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) s[c * 4 + r] = t[((c + r) % 4) * 4 + r]; };
+  const unshift = s => { const t = s.slice(); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) s[((c + r) % 4) * 4 + r] = t[c * 4 + r]; };
+  const mix = s => { for (let c = 0; c < 4; c++) { const [a, b, d, e] = s.slice(c * 4, c * 4 + 4);
+    s[c*4] = xt(a) ^ xt(b) ^ b ^ d ^ e; s[c*4+1] = a ^ xt(b) ^ xt(d) ^ d ^ e;
+    s[c*4+2] = a ^ b ^ xt(d) ^ xt(e) ^ e; s[c*4+3] = xt(a) ^ a ^ b ^ d ^ xt(e); } };
+  const unmix = s => { for (let c = 0; c < 4; c++) { const [a, b, d, e] = s.slice(c * 4, c * 4 + 4);
+    s[c*4] = mul(a,14) ^ mul(b,11) ^ mul(d,13) ^ mul(e,9); s[c*4+1] = mul(a,9) ^ mul(b,14) ^ mul(d,11) ^ mul(e,13);
+    s[c*4+2] = mul(a,13) ^ mul(b,9) ^ mul(d,14) ^ mul(e,11); s[c*4+3] = mul(a,11) ^ mul(b,13) ^ mul(d,9) ^ mul(e,14); } };
+  const enc = blk => { const s = Uint8Array.from(blk); addRK(s, 0);
+    for (let r = 1; r < 10; r++) { for (let i = 0; i < 16; i++) s[i] = S[s[i]]; shift(s); mix(s); addRK(s, r); }
+    for (let i = 0; i < 16; i++) s[i] = S[s[i]]; shift(s); addRK(s, 10); return s; };
+  const dec = blk => { const s = Uint8Array.from(blk); addRK(s, 10);
+    for (let r = 9; r >= 1; r--) { unshift(s); for (let i = 0; i < 16; i++) s[i] = Si[s[i]]; addRK(s, r); unmix(s); }
+    unshift(s); for (let i = 0; i < 16; i++) s[i] = Si[s[i]]; addRK(s, 0); return s; };
+  const ecb = f => data => { const out = new Uint8Array(data.length); for (let i = 0; i < data.length; i += 16) out.set(f(data.subarray(i, i + 16)), i); return out; };
+  return { encrypt: ecb(enc), decrypt: ecb(dec) };
+})();
+
+// Command = [len][ASCII op][args] zero-padded to 16-byte blocks, AES-128-ECB.
+function buildCmd(op, args = []) {
+  const body = [op.length + args.length, ...Array.from(op, c => c.charCodeAt(0)), ...args];
+  const clear = new Uint8Array(Math.ceil(body.length / 16) * 16);
+  clear.set(body);
+  return { clear, enc: Aes128.encrypt(clear) };
+}
+
+// Notification = encrypted [len][ASCII reply]...; fall back to plain text.
+function parseNotify(bytes) {
+  const read = buf => { const n = buf[0]; let s = ''; for (let i = 1; i <= n && i < buf.length; i++) { const c = buf[i]; if (c >= 32 && c < 127) s += String.fromCharCode(c); else break; } return s; };
+  let clear = bytes, text = '';
+  if (bytes.length >= 16 && bytes.length % 16 === 0) { clear = Aes128.decrypt(bytes); text = read(clear); }
+  if (text.length < 2) { const raw = read(bytes); if (raw.length >= 2) { clear = bytes; text = raw; } }
+  return { text, clear };
+}
+
+// DATS for a full-colour frame: [total u16 BE][0x00 0x01][0x01], as captured from the official app.
+const datsArgs = total => [(total >> 8) & 0xff, total & 0xff, 0x00, 0x01, 0x01];
+
+// Data packets on …960a: [len = data+1][packet index][up to 98 data bytes], unencrypted.
+function chunkPayload(payload) {
+  const out = [];
+  for (let i = 0, idx = 0; i < payload.length; i += 98, idx++) {
+    const d = payload.subarray(i, i + 98);
+    const p = new Uint8Array(d.length + 2);
+    p[0] = d.length + 1; p[1] = idx & 0xff; p.set(d, 2);
+    out.push(p);
+  }
+  return out;
+}
+
+// Frame pixels go column by column (left to right), each column top to bottom, as R,G,B.
+function rgbaToPayload(rgba, opts = {}) {
+  const out = new Uint8Array(FRAME_BYTES);
+  let k = 0;
+  for (let c = 0; c < W; c++) {
+    const x = opts.flip ? W - 1 - c : c;
+    for (let y = 0; y < H; y++) {
+      const i = (y * W + x) * 4;
+      let r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+      if (opts.knockout && r >= 232 && g >= 232 && b >= 232) r = g = b = 0;
+      out[k++] = r; out[k++] = g; out[k++] = b;
+    }
+  }
+  return out;
+}
+
+function sampleIndices(total, want) {
+  if (total <= want) return Array.from({ length: total }, (_, i) => i);
+  return Array.from({ length: want }, (_, i) => Math.floor(i * total / want));
+}
+// ==CORE END==
+
+// ---------- page ----------
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('smr:' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('smr:' + k, JSON.stringify(v)); } catch {} },
+};
+
+const opts = { fit: store.get('fit', 'contain'), knockout: store.get('knockout', true), flip: store.get('flip', false) };
+const st = {
+  device: null, cmd: null, data: null, notify: null, connected: false, notifyOK: false,
+  blind: false, datcp: null, busy: false, live: false, liveTimer: null, liveIdx: 0,
+  waiters: [], queue: Promise.resolve(), wake: null, quietPlay: false,
+};
+let frames = [];            // { src: canvas, rgba: Uint8ClampedArray, payload: Uint8Array }
+let isSample = false;
+let previewIdx = 0, previewTimer = null;
+
+// ---------- log ----------
+const logLines = [];
+function log(...parts) {
+  const t = new Date().toTimeString().slice(0, 8);
+  logLines.push(t + '  ' + parts.join(' '));
+  if (logLines.length > 500) logLines.splice(0, logLines.length - 500);
+  const el = $('log'); el.textContent = logLines.join('\n'); el.scrollTop = el.scrollHeight;
+}
+function status(msg, kind = '') { const s = $('playStatus'); s.textContent = msg; s.dataset.kind = kind; }
+function fail(e, where) {
+  const msg = (where ? where + ': ' : '') + (e && e.message ? e.message : String(e));
+  log('ERROR', msg); status(msg, 'err');
+}
+
+// ---------- environment ----------
+function envBanner(html) { const b = $('envBanner'); b.innerHTML = html; b.hidden = !html; }
+function checkEnv() {
+  if (!window.isSecureContext) { envBanner('Bluetooth only works on <b>https</b> pages. Put this file on GitHub Pages (or any https host) and open that link in Chrome.'); return false; }
+  if (!navigator.bluetooth) { envBanner('This browser can’t use Bluetooth. Open this page in <b>Chrome on Android</b>, or Chrome or Edge on a laptop. On iPhone, use the free <b>Bluefy</b> browser.'); return false; }
+  if (navigator.bluetooth.getAvailability) navigator.bluetooth.getAvailability().then(ok => { if (!ok) envBanner('Bluetooth looks switched off on this device. Turn it on, then tap Connect.'); }).catch(() => {});
+  return true;
+}
+
+// ---------- BLE ----------
+function setChip(state, text) { const c = $('connChip'); c.dataset.state = state; c.textContent = text; }
+function enqueue(fn) { const p = st.queue.then(fn, fn); st.queue = p.catch(() => {}); return p; }
+
+function expect(prefix, ms) {
+  return new Promise(resolve => {
+    const w = { prefix, resolve };
+    w.t = setTimeout(() => { const i = st.waiters.indexOf(w); if (i >= 0) st.waiters.splice(i, 1); resolve(null); }, ms);
+    st.waiters.push(w);
+  });
+}
+
+function onNotify(e) {
+  const v = e.target.value;
+  const bytes = new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
+  const msg = parseNotify(bytes);
+  const quiet = msg.text === 'REOK' || (st.quietPlay && msg.text.startsWith('PLAY'));
+  if (!quiet) log('←', msg.text || '(no text)', toHex(msg.clear));
+  const i = st.waiters.findIndex(w => msg.text.startsWith(w.prefix));
+  if (i >= 0) { const w = st.waiters.splice(i, 1)[0]; clearTimeout(w.t); w.resolve(msg); }
+}
+
+function sendCmd(op, args = [], quiet = false) {
+  return enqueue(async () => {
+    if (!st.connected) throw new Error('Not connected to the mask');
+    const { clear, enc } = buildCmd(op, args);
+    if (!quiet) log('→', op, toHex(clear));
+    try { await (st.cmd.writeValueWithResponse ? st.cmd.writeValueWithResponse(enc) : st.cmd.writeValue(enc)); }
+    catch (e) { if (e.name === 'NotSupportedError' && st.cmd.writeValueWithoutResponse) await st.cmd.writeValueWithoutResponse(enc); else throw e; }
+  });
+}
+function sendData(pkt) {
+  return enqueue(async () => {
+    if (!st.connected) throw new Error('Not connected to the mask');
+    if (st.data.properties.writeWithoutResponse && st.data.writeValueWithoutResponse) await st.data.writeValueWithoutResponse(pkt);
+    else await st.data.writeValue(pkt);
+  });
+}
+
+async function pickDevice(all) {
+  if (!checkEnv()) return;
+  try {
+    const req = all ? { acceptAllDevices: true, optionalServices: [UUID.svc] }
+                    : { filters: [{ namePrefix: 'MASK' }, { services: [UUID.svc] }], optionalServices: [UUID.svc] };
+    const dev = await navigator.bluetooth.requestDevice(req);
+    if (st.device && st.device !== dev) st.device.removeEventListener('gattserverdisconnected', onDisconnected);
+    st.device = dev;
+    dev.addEventListener('gattserverdisconnected', onDisconnected);
+    await attach();
+  } catch (e) {
+    if (e.name === 'NotFoundError') { log('Device picker closed without a choice'); return; }
+    if (e.name === 'SecurityError') { envBanner('Bluetooth is blocked on this page (it’s probably inside a preview frame). Open the file from its own https link in Chrome.'); }
+    fail(e, 'Connect failed');
+  }
+}
+
+async function attach() {
+  setChip('busy', 'Connecting…'); $('btnConnect').disabled = true;
+  try {
+    let svc, lastErr;
+    for (let a = 0; a < 3 && !svc; a++) {
+      try { const server = await st.device.gatt.connect(); svc = await server.getPrimaryService(UUID.svc); }
+      catch (e) { lastErr = e; await sleep(600); }
+    }
+    if (!svc) throw lastErr || new Error('Mask service not found');
+    st.cmd = await svc.getCharacteristic(UUID.cmd);
+    st.data = await svc.getCharacteristic(UUID.data);
+    st.connected = true; st.blind = false; st.datcp = null;
+    try {
+      if (st.notify) st.notify.removeEventListener('characteristicvaluechanged', onNotify);
+      st.notify = await svc.getCharacteristic(UUID.notify);
+      st.notify.addEventListener('characteristicvaluechanged', onNotify);
+      await st.notify.startNotifications();
+      st.notifyOK = true;
+    } catch (e) { st.notifyOK = false; st.blind = true; log('Replies unavailable (' + e.message + '). Uploads will use fixed timing.'); }
+    setChip('on', st.device.name || 'Mask connected');
+    log('Connected to', st.device.name || '(unnamed)', '| replies:', st.notifyOK ? 'on' : 'off');
+    status('Connected.', 'ok');
+  } catch (e) {
+    st.connected = false; setChip('off', 'Not connected'); fail(e, 'Connect failed');
+  } finally { $('btnConnect').disabled = false; refreshUI(); }
+}
+
+function onDisconnected() {
+  st.connected = false; stopLive(true);
+  setChip('off', 'Disconnected'); log('Mask disconnected');
+  st.waiters.splice(0).forEach(w => { clearTimeout(w.t); w.resolve(null); });
+  refreshUI();
+}
+
+async function keepAwake(on) {
+  try {
+    if (on && !st.wake && navigator.wakeLock) { st.wake = await navigator.wakeLock.request('screen'); st.wake.addEventListener('release', () => { st.wake = null; }); }
+    else if (!on && st.wake) { await st.wake.release(); st.wake = null; }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (st.live || st.busy)) keepAwake(true); });
+
+// ---------- upload ----------
+async function uploadFrame(payload, onPkt) {
+  const pkts = chunkPayload(payload);
+  if (!st.blind) {
+    const w = expect('DATSOK', 3000);
+    await sendCmd('DATS', datsArgs(payload.length));
+    if (!(await w)) { st.blind = true; log('No DATSOK reply. Switching to fixed timing for the rest of this session.'); await sleep(150); }
+  } else {
+    await sendCmd('DATS', datsArgs(payload.length)); await sleep(150);
+  }
+  for (let i = 0; i < pkts.length; i++) {
+    if (!st.blind) {
+      const w = expect('REOK', 2000);
+      await sendData(pkts[i]);
+      if (!(await w)) { st.blind = true; log('No REOK after packet ' + i + '. Switching to fixed timing.'); }
+    } else {
+      await sendData(pkts[i]); await sleep(90);
+    }
+    onPkt(i + 1, pkts.length);
+  }
+  if (st.blind) {
+    await sendCmd('DATCP', BF_DATCP); await sleep(500);
+    return;
+  }
+  const variants = st.datcp ? [st.datcp] : ['plain', 'tail'];
+  for (const v of variants) {
+    const w = expect('DATCPOK', 3000);
+    await sendCmd('DATCP', v === 'plain' ? [] : BF_DATCP);
+    if (await w) { st.datcp = v; return; }
+    log('No DATCPOK for the ' + v + ' finish command.');
+  }
+  throw new Error('The mask didn’t confirm the frame. Check the log.');
+}
+
+function setProgress(done, total, text) {
+  $('progress').hidden = false;
+  $('bar').style.width = (total ? Math.min(100, done / total * 100) : 0) + '%';
+  $('progText').textContent = text;
+}
+
+async function sendFrames() {
+  if (!frames.length || st.busy) return;
+  st.busy = true; stopLive(); refreshUI(); keepAwake(true);
+  const n = frames.length;
+  const t0 = performance.now();
+  try {
+    if ($('replace').checked) {
+      setProgress(0, 1, 'Clearing old custom images…');
+      await sendCmd('DELE', [10, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11]); await sleep(400);
+      await sendCmd('DELE', [10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]); await sleep(700);
+    }
+    for (let f = 0; f < n; f++) {
+      await uploadFrame(frames[f].payload, (p, t) => setProgress(f + p / t, n, `Frame ${f + 1} of ${n} · packet ${p}/${t}`));
+      log(`Frame ${f + 1}/${n} stored`);
+    }
+    $('onMask').value = n; store.set('onMask', n);
+    const secs = ((performance.now() - t0) / 1000).toFixed(0);
+    setProgress(n, n, `Done · ${n} frame${n > 1 ? 's' : ''} in ${secs}s`);
+    status(`${n} frame${n > 1 ? 's are' : ' is'} on the mask. Choose how to play ${n > 1 ? 'them' : 'it'} below.`, 'ok');
+    sendCmd('CHEC').catch(() => {});
+  } catch (e) {
+    fail(e, 'Upload stopped');
+    setProgress(0, 1, 'Upload stopped. Reconnect if needed, then send again.');
+  } finally {
+    st.busy = false; keepAwake(st.live); refreshUI();
+  }
+}
+
+// ---------- playback ----------
+function onMaskCount() { const n = Math.max(0, Math.min(MAX_FRAMES, parseInt($('onMask').value, 10) || 0)); return n; }
+
+async function loopOnMask() {
+  const n = onMaskCount(); if (!n) { status('Send frames first, or set how many frames are already on the mask.', 'warn'); return; }
+  stopLive();
+  try {
+    await sendCmd('SPEED', [+$('speed').value]);
+    const w = expect('PLAYOK', 2500);
+    await sendCmd('PLAY', [n, ...Array.from({ length: n }, (_, i) => i + 1)]);
+    const ok = await w;
+    if (ok || st.blind) status(`Looping ${n} frame${n > 1 ? 's' : ''} on the mask. You can disconnect now.`, 'ok');
+    else status(n > 10 ? 'The mask didn’t confirm. It may only loop 10 frames at once; try 10 or fewer, or use Drive from phone.' : 'Sent, but the mask didn’t confirm. Check the log.', 'warn');
+  } catch (e) { fail(e, 'Play failed'); }
+}
+
+function startLive() {
+  const n = onMaskCount(); if (!n) { status('Send frames first, or set how many frames are already on the mask.', 'warn'); return; }
+  st.live = true; st.liveIdx = 0; st.quietPlay = true; keepAwake(true); refreshUI();
+  status(`Playing ${n} frame${n > 1 ? 's' : ''} from the phone.`, 'ok');
+  log('Live playback started:', n, 'frames at', $('fps').value, 'fps');
+  const tick = async () => {
+    if (!st.live) return;
+    if (!st.connected) { stopLive(); return; }
+    const t0 = performance.now();
+    const idx = (st.liveIdx % n) + 1; st.liveIdx++;
+    try { await sendCmd('PLAY', [1, idx], true); } catch (e) { stopLive(); fail(e, 'Playback stopped'); return; }
+    const wait = Math.max(0, 1000 / (+$('fps').value) - (performance.now() - t0));
+    st.liveTimer = setTimeout(tick, wait);
+  };
+  tick();
+}
+function stopLive(silent) {
+  if (!st.live) return;
+  st.live = false; st.quietPlay = false; clearTimeout(st.liveTimer);
+  keepAwake(st.busy); refreshUI();
+  if (!silent) { status('Stopped. The mask holds the last frame.', ''); log('Live playback stopped'); }
+}
+
+// ---------- frames & preview ----------
+const work = document.createElement('canvas'); work.width = W; work.height = H;
+const wctx = work.getContext('2d', { willReadFrequently: true });
+
+function renderFrame(fr) {
+  const src = fr.src;
+  wctx.fillStyle = '#000'; wctx.fillRect(0, 0, W, H);
+  const exact = src.width === W && src.height === H;
+  wctx.imageSmoothingEnabled = !exact; wctx.imageSmoothingQuality = 'high';
+  const sc = opts.fit === 'cover' ? Math.max(W / src.width, H / src.height) : Math.min(W / src.width, H / src.height);
+  const dw = src.width * sc, dh = src.height * sc;
+  wctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  const data = wctx.getImageData(0, 0, W, H).data;
+  if (opts.knockout) for (let i = 0; i < data.length; i += 4) if (data[i] >= 232 && data[i + 1] >= 232 && data[i + 2] >= 232) data[i] = data[i + 1] = data[i + 2] = 0;
+  fr.rgba = new Uint8ClampedArray(data);
+  fr.payload = rgbaToPayload(fr.rgba, { flip: opts.flip, knockout: false });
+}
+function rerenderAll() { frames.forEach(renderFrame); drawStrip(); drawPreview(); }
+
+function toSource(drawable, w, h) {
+  const s = Math.min(1, 256 / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+  const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(drawable, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function sourcesFromFile(file, room) {
+  if (room <= 0) return [];
+  const animated = /image\/(gif|webp|apng|png)/.test(file.type);
+  if (animated && 'ImageDecoder' in window) {
+    try {
+      if (await ImageDecoder.isTypeSupported(file.type)) {
+        const dec = new ImageDecoder({ data: await file.arrayBuffer(), type: file.type });
+        await dec.completed;
+        const count = dec.tracks.selectedTrack ? dec.tracks.selectedTrack.frameCount : 1;
+        const out = [];
+        for (const i of sampleIndices(count, room)) {
+          const { image } = await dec.decode({ frameIndex: i });
+          out.push(toSource(image, image.displayWidth, image.displayHeight));
+          image.close();
+        }
+        dec.close();
+        if (count > room) log(`${file.name}: ${count} frames, kept ${room} evenly spaced`);
+        return out;
+      }
+    } catch (e) { log('Could not split', file.name, '(' + e.message + '). Using its first frame.'); }
+  }
+  const bmp = await createImageBitmap(file);
+  const c = toSource(bmp, bmp.width, bmp.height); bmp.close && bmp.close();
+  return [c];
+}
+
+async function addFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (isSample) { frames = []; isSample = false; }
+  for (const f of files) {
+    const room = MAX_FRAMES - frames.length;
+    if (room <= 0) { status('20 frames is the limit. Remove some to add more.', 'warn'); break; }
+    try {
+      const srcs = await sourcesFromFile(f, room);
+      for (const s of srcs) { const fr = { src: s }; renderFrame(fr); frames.push(fr); }
+    } catch (e) { fail(e, 'Could not read ' + f.name); }
+  }
+  previewIdx = 0; drawStrip(); drawPreview(); refreshUI();
+}
+
+function drawStrip() {
+  const strip = $('strip'); strip.textContent = '';
+  frames.forEach((fr, i) => {
+    const b = document.createElement('div');
+    b.className = 'thumb'; b.tabIndex = 0; b.setAttribute('role', 'button');
+    b.setAttribute('aria-label', 'Frame ' + (i + 1)); b.setAttribute('aria-current', String(i === previewIdx));
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(fr.rgba), W, H), 0, 0);
+    const lab = document.createElement('span'); lab.className = 'i'; lab.textContent = i + 1;
+    const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove frame ' + (i + 1));
+    x.addEventListener('click', ev => { ev.stopPropagation(); frames.splice(i, 1); if (isSample && !frames.length) isSample = false; previewIdx = 0; drawStrip(); drawPreview(); refreshUI(); });
+    b.addEventListener('click', () => { previewIdx = i; drawPreview(); markStrip(); });
+    b.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); } });
+    b.append(c, lab, x); strip.append(b);
+  });
+  $('frameCount').textContent = `${frames.length} / ${MAX_FRAMES} frames`;
+  $('sampleTag').hidden = !isSample;
+  $('btnSend').textContent = frames.length ? `Send ${frames.length} frame${frames.length > 1 ? 's' : ''}` : 'Send frames';
+}
+function markStrip() { Array.from($('strip').children).forEach((el, i) => el.setAttribute('aria-current', String(i === previewIdx))); }
+
+const pv = $('preview'), pctx = pv.getContext('2d');
+function sizePreview() {
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  pv.width = Math.round(276 * dpr); pv.height = Math.round(348 * dpr);
+}
+function drawPreview() {
+  const cs = getComputedStyle(document.documentElement);
+  const bg = cs.getPropertyValue('--panel').trim() || '#06070a';
+  const off = cs.getPropertyValue('--panel-off').trim() || '#17191f';
+  pctx.fillStyle = bg; pctx.fillRect(0, 0, pv.width, pv.height);
+  const cell = Math.min(pv.width / W, pv.height / H), rad = cell * 0.4;
+  const ox = (pv.width - cell * W) / 2, oy = (pv.height - cell * H) / 2;
+  const fr = frames[previewIdx];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let col = off;
+    if (fr) { const i = (y * W + x) * 4; const r = fr.rgba[i], g = fr.rgba[i + 1], b = fr.rgba[i + 2]; if (r + g + b > 24) col = `rgb(${r},${g},${b})`; }
+    pctx.fillStyle = col; pctx.beginPath(); pctx.arc(ox + (x + .5) * cell, oy + (y + .5) * cell, rad, 0, Math.PI * 2); pctx.fill();
+  }
+  $('dims').textContent = frames.length ? `frame ${previewIdx + 1} of ${frames.length}` : 'no frames';
+}
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  previewTimer = setTimeout(() => {
+    if (frames.length > 1 && !reduce) { previewIdx = (previewIdx + 1) % frames.length; drawPreview(); markStrip(); }
+    schedulePreview();
+  }, 1000 / (+$('fps').value || 6));
+}
+
+function makeSample() {
+  const eyes = [8, 4, 1, 4];
+  frames = eyes.map(ry => {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#35d0ff';
+    for (const cx of [13, 32]) { x.beginPath(); x.ellipse(cx + .5, 21, 6, Math.max(1, ry), 0, 0, Math.PI * 2); x.fill(); }
+    x.strokeStyle = '#ff4f9a'; x.lineWidth = 3; x.beginPath(); x.arc(23, 34, 11, .2 * Math.PI, .8 * Math.PI); x.stroke();
+    const fr = { src: c }; renderFrame(fr); return fr;
+  });
+  isSample = true;
+}
+
+// ---------- UI wiring ----------
+function refreshUI() {
+  document.querySelectorAll('[data-needs-conn]').forEach(el => { el.disabled = !st.connected || st.busy; });
+  $('btnSend').disabled = !st.connected || st.busy || !frames.length;
+  $('btnConnect').textContent = st.connected ? 'Connected' : (st.device ? 'Reconnect' : 'Connect to mask');
+  $('btnConnect').disabled = st.connected;
+  $('btnDisconnect').hidden = !st.connected;
+  $('btnLive').textContent = st.live ? 'Stop' : 'Start playing';
+  if (st.live) $('btnLive').disabled = false;
+  $('btnClearFrames').disabled = !frames.length;
+}
+
+$('btnConnect').addEventListener('click', () => { if (st.device && !st.connected) { attach(); } else pickDevice(false); });
+$('btnConnectAll').addEventListener('click', () => pickDevice(true));
+$('btnDisconnect').addEventListener('click', () => { stopLive(); try { st.device && st.device.gatt.disconnect(); } catch {} });
+
+let lightT;
+$('light').value = store.get('light', 60); $('lightOut').textContent = $('light').value;
+$('light').addEventListener('input', () => {
+  $('lightOut').textContent = $('light').value; store.set('light', +$('light').value);
+  clearTimeout(lightT); lightT = setTimeout(() => { if (st.connected) sendCmd('LIGHT', [+$('light').value]).catch(e => fail(e)); }, 150);
+});
+
+const presetN = { IMAG: store.get('imag', 1), ANIM: store.get('anim', 1) };
+$('imagN').textContent = presetN.IMAG; $('animN').textContent = presetN.ANIM;
+document.querySelectorAll('.step button').forEach(b => b.addEventListener('click', () => {
+  const k = b.dataset.kind;
+  presetN[k] = Math.max(1, Math.min(255, presetN[k] + (+b.dataset.d)));
+  $(k === 'IMAG' ? 'imagN' : 'animN').textContent = presetN[k];
+  store.set(k === 'IMAG' ? 'imag' : 'anim', presetN[k]);
+  stopLive();
+  sendCmd(k, [presetN[k]]).catch(e => fail(e));
+}));
+
+$('fileIn').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+$('btnClearFrames').addEventListener('click', () => { frames = []; isSample = false; previewIdx = 0; drawStrip(); drawPreview(); refreshUI(); });
+
+document.querySelectorAll('input[name=fit]').forEach(r => { r.checked = r.value === opts.fit; r.addEventListener('change', () => { opts.fit = r.value; store.set('fit', opts.fit); rerenderAll(); }); });
+$('knockout').checked = opts.knockout; $('knockout').addEventListener('change', e => { opts.knockout = e.target.checked; store.set('knockout', opts.knockout); rerenderAll(); });
+$('flip').checked = opts.flip; $('flip').addEventListener('change', e => { opts.flip = e.target.checked; store.set('flip', opts.flip); rerenderAll(); });
+
+$('btnSend').addEventListener('click', sendFrames);
+$('onMask').value = store.get('onMask', 0);
+$('onMask').addEventListener('change', () => store.set('onMask', onMaskCount()));
+
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+  const phone = document.querySelector('input[name=mode]:checked').value === 'phone';
+  $('paneMask').hidden = phone; $('panePhone').hidden = !phone;
+  if (!phone) stopLive();
+}));
+$('speed').value = store.get('speed', 20); $('speedOut').textContent = $('speed').value;
+$('speed').addEventListener('input', () => { $('speedOut').textContent = $('speed').value; store.set('speed', +$('speed').value); });
+$('fps').value = store.get('fps', 6); $('fpsOut').textContent = $('fps').value;
+$('fps').addEventListener('input', () => { $('fpsOut').textContent = $('fps').value; store.set('fps', +$('fps').value); });
+$('btnLoop').addEventListener('click', loopOnMask);
+$('btnLive').addEventListener('click', () => st.live ? stopLive() : startLive());
+$('btnCheck').addEventListener('click', () => { $('logBox').open = true; sendCmd('CHEC').catch(e => fail(e)); });
+
+$('btnCopyLog').addEventListener('click', async () => {
+  const text = logLines.join('\n') || '(log is empty)';
+  try { await navigator.clipboard.writeText(text); $('btnCopyLog').textContent = 'Copied'; setTimeout(() => { $('btnCopyLog').textContent = 'Copy log'; }, 1500); }
+  catch { const r = document.createRange(); r.selectNodeContents($('log')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+});
+$('btnClearLog').addEventListener('click', () => { logLines.length = 0; $('log').textContent = ''; });
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawPreview);
+
+// ---------- start ----------
+sizePreview(); makeSample(); drawStrip(); drawPreview(); schedulePreview(); refreshUI(); checkEnv();
+log('Ready. ' + (navigator.bluetooth ? 'Bluetooth API available.' : 'Bluetooth API not available in this browser.'));
+</script>
+</body>
+</html>
