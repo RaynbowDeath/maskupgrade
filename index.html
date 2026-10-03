@@ -114,6 +114,7 @@ details.log summary{font-size:1.02rem}
 .slots{display:flex;flex-wrap:wrap;gap:8px}
 .slots button{min-width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:700 16px var(--font-mono);cursor:pointer}
 .slots button:disabled{opacity:.45;cursor:not-allowed}
+.slots button[aria-current="true"]{border-color:var(--accent);color:var(--accent)}
 .slots button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:380px){.steps{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
@@ -185,7 +186,7 @@ details.log summary{font-size:1.02rem}
 
   <section class="card">
     <h2>1 · Send frames to the mask</h2>
-    <label class="check"><input type="checkbox" id="replace" checked>Delete the custom images already on the mask first, so these frames become slots 1 to N</label>
+    <label class="check"><input type="checkbox" id="replace">Try to delete existing images first (your mask's firmware often ignores this, so leave it off and use the slot buttons to find your frames)</label>
     <button id="btnSend" class="btn primary wide" data-needs-conn>Send frames</button>
     <div id="progress" class="progress" hidden>
       <div class="bar"><i id="bar"></i></div>
@@ -197,7 +198,7 @@ details.log summary{font-size:1.02rem}
   <section class="card">
     <h2>2 · Play</h2>
     <label class="field" for="onMask"><span>Frames on the mask</span><span></span><input type="number" id="onMask" min="1" max="20" value="0"></label>
-    <label class="field" for="firstSlot"><span>Starting at slot</span><span></span><input type="number" id="firstSlot" min="1" max="20" value="1"></label>
+    <label class="field" for="firstSlot"><span>Starting at slot</span><span></span><input type="number" id="firstSlot" min="1" max="40" value="1"></label>
     <div class="seg" role="radiogroup" aria-label="Playback">
       <label><input type="radio" name="mode" value="mask" checked>Loop on the mask</label>
       <label><input type="radio" name="mode" value="phone">Drive from phone</label>
@@ -214,8 +215,9 @@ details.log summary{font-size:1.02rem}
     </div>
     <p id="playStatus" class="status" aria-live="polite"></p>
     <div class="optgrid">
-      <span class="lbl-sm">Show one stored frame</span>
+      <span class="lbl-sm">Find your frames</span>
       <div id="slotRow" class="slots"></div>
+      <p class="hint">Each button shows that stored slot on the mask. Tap through to find your frames, then set "Frames on the mask" and "Starting at slot" to match and loop.</p>
     </div>
     <button id="btnCheck" class="linkbtn" data-needs-conn>Ask the mask how many custom images it holds</button>
   </section>
@@ -459,6 +461,7 @@ async function attach() {
     setChip('on', st.device.name || 'Mask connected');
     log('Connected to', st.device.name || '(unnamed)', '| replies:', st.notifyOK ? 'on' : 'off');
     status('Connected.', 'ok');
+    checkCount().then(c => { if (c !== null) log('Mask currently holds ' + c + ' custom image' + (c === 1 ? '' : 's')); drawSlots(); }).catch(() => {});
   } catch (e) {
     st.connected = false; setChip('off', 'Not connected'); fail(e, 'Connect failed');
   } finally { $('btnConnect').disabled = false; refreshUI(); }
@@ -480,7 +483,12 @@ async function keepAwake(on) {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (st.live || st.busy)) keepAwake(true); });
 
 // ---------- stored-image slots ----------
-// CHEC reply = [len]"CHEC"[count]; returns the count, or null if the mask doesn't answer.
+// This mask holds more than the app's 20 and its delete is unreliable, so the real tool
+// is probing: upload appends to the end, then the slot buttons find where the frames landed.
+const MAX_SLOT = 40;
+let lastCount = null;
+
+// CHEC reply = [len]"CHEC"[count]; returns the count (also cached), or null if no answer.
 async function checkCount() {
   if (st.blind) return null;
   const w = expect('CHEC', 2500);
@@ -488,35 +496,43 @@ async function checkCount() {
   const m = await w;
   if (!m) return null;
   const n = m.clear[0];
-  return n >= 5 ? m.clear[n] : null;
+  const c = n >= 5 ? m.clear[n] : null;
+  if (c !== null) lastCount = c;
+  return c;
 }
 
-// Delete every stored custom image, one at a time from the end, checking the count each round.
+// Best-effort clear: a few bulk passes from the top down. This firmware often ignores deletes
+// and its count sticks, so this never loops forever and never blocks the upload that follows.
 async function clearAll(onStep) {
   let c = await checkCount();
-  if (c === null) {
-    await sendCmd('DELE', [10, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11]); await sleep(600);
-    await sendCmd('DELE', [10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]); await sleep(900);
-    return null;
-  }
-  const start = c;
-  log('Mask holds ' + c + ' custom image' + (c === 1 ? '' : 's') + ' before clearing');
-  for (let guard = 0; c > 0 && guard < 30; guard++) {
-    const w = expect('DELEOK', 2500);
-    await sendCmd('DELE', [1, c]);
-    await w; await sleep(120);
-    const next = await checkCount();
-    if (next === null || next >= c) { log('Clearing stopped at ' + (next === null ? '?' : next) + ' images'); c = next; break; }
-    c = next;
-    if (onStep) onStep(start - c, start);
+  const blind = c === null;
+  if (!blind) log('Mask holds ' + c + ' custom image' + (c === 1 ? '' : 's') + '; clearing (best effort)');
+  const start = c || 30;
+  let prev = c, stall = 0;
+  for (let pass = 0; pass < 6; pass++) {
+    if (c === 0) break;
+    // Delete the existing run of images in descending batches of 10 (the pattern the firmware accepts).
+    const top = blind ? 30 : c;
+    for (let hi = top; hi >= 1; hi -= 10) {
+      const idx = [];
+      for (let k = hi; k > hi - 10 && k >= 1; k--) idx.push(k);
+      const w = expect('DELEOK', 2500);
+      await sendCmd('DELE', [idx.length, ...idx]);
+      await w; await sleep(180);
+    }
+    await sleep(500);
+    c = await checkCount();
+    if (c === null) return null;
+    if (onStep) onStep(Math.max(0, start - c), start);
+    if (prev !== null && c >= prev) { if (++stall >= 2) break; } else stall = 0;
+    prev = c;
   }
   return c;
 }
 
+function firstSlot() { return Math.max(1, Math.min(MAX_SLOT, parseInt($('firstSlot').value, 10) || 1)); }
 function slotList() {
-  const n = onMaskCount();
-  const first = Math.max(1, Math.min(MAX_FRAMES, parseInt($('firstSlot').value, 10) || 1));
-  return Array.from({ length: n }, (_, i) => first + i).filter(s => s <= 255);
+  return Array.from({ length: onMaskCount() }, (_, i) => firstSlot() + i).filter(s => s <= 255);
 }
 
 // ---------- upload ----------
@@ -571,19 +587,19 @@ async function sendFrames() {
       if (left) log('Note: ' + left + ' old image' + (left === 1 ? '' : 's') + ' could not be deleted');
     }
     const before = await checkCount();
-    if (before !== null && before + n > MAX_FRAMES) throw new Error(`The mask already holds ${before} custom images, so ${n} more won't fit in its ${MAX_FRAMES} slots. Tick "Delete the custom images already on the mask first" and send again.`);
     for (let f = 0; f < n; f++) {
       await uploadFrame(frames[f].payload, (p, t) => setProgress(f + p / t, n, `Frame ${f + 1} of ${n} · packet ${p}/${t}`));
       log(`Frame ${f + 1}/${n} stored`);
     }
     const after = await checkCount();
-    const first = after !== null ? Math.max(1, after - n + 1) : (before !== null ? before + 1 : 1);
+    // The mask appends, so new frames land just after whatever it already held.
+    const guess = Math.min(MAX_SLOT, after !== null ? Math.max(1, after - n + 1) : (before !== null ? before + 1 : 1));
     $('onMask').value = n; store.set('onMask', n);
-    $('firstSlot').value = first; store.set('firstSlot', first); drawSlots();
-    log(`Frames are in slots ${first}–${first + n - 1}` + (after !== null ? ` (mask now holds ${after})` : ''));
+    $('firstSlot').value = guess; store.set('firstSlot', guess); drawSlots();
+    log(`Frames likely in slots ${guess}–${guess + n - 1}` + (after !== null ? ` (mask reports ${after} images)` : ''));
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     setProgress(n, n, `Done · ${n} frame${n > 1 ? 's' : ''} in ${secs}s`);
-    status(`${n} frame${n > 1 ? 's are' : ' is'} on the mask in slots ${first}–${first + n - 1}. Choose how to play ${n > 1 ? 'them' : 'it'} below.`, 'ok');
+    status(`${n} frame${n > 1 ? 's' : ''} sent. Likely in slots ${guess}–${guess + n - 1}. If the loop shows the wrong images, tap the slot buttons below to find them, then set "Starting at slot".`, 'ok');
   } catch (e) {
     fail(e, 'Upload stopped');
     setProgress(0, 1, 'Upload stopped. Reconnect if needed, then send again.');
@@ -826,12 +842,13 @@ $('speed').addEventListener('input', () => {
 
 function drawSlots() {
   const row = $('slotRow'); row.textContent = '';
-  const list = onMaskCount() ? slotList() : Array.from({ length: MAX_FRAMES }, (_, k) => k + 1);
-  for (const i of list) {
+  const probeMax = Math.min(MAX_SLOT, Math.max(30, lastCount || 0, firstSlot() + onMaskCount() - 1));
+  for (let i = 1; i <= probeMax; i++) {
     const b = document.createElement('button');
-    b.textContent = i; b.setAttribute('aria-label', 'Show stored frame ' + i); b.dataset.needsConn = '';
+    b.textContent = i; b.setAttribute('aria-label', 'Show stored image ' + i); b.dataset.needsConn = '';
     b.disabled = !st.connected || st.busy;
-    b.addEventListener('click', () => { stopLive(); sendCmd('PLAY', [1, i]).then(() => status('Showing stored frame ' + i + '.', 'ok')).catch(e => fail(e)); });
+    if (onMaskCount() && i >= firstSlot() && i < firstSlot() + onMaskCount()) b.setAttribute('aria-current', 'true');
+    b.addEventListener('click', () => { stopLive(); sendCmd('PLAY', [1, i]).then(() => status('Showing the image in slot ' + i + '.', 'ok')).catch(e => fail(e)); });
     row.append(b);
   }
 }
