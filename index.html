@@ -110,6 +110,11 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 details.log summary{font-size:1.02rem}
 #log{margin:0;max-height:300px;overflow:auto;font:11.5px/1.5 var(--font-mono);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-all}
 .foot{color:var(--muted);font-size:12.5px;text-align:center}
+.lbl-sm{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.slots{display:flex;flex-wrap:wrap;gap:8px}
+.slots button{min-width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:700 16px var(--font-mono);cursor:pointer}
+.slots button:disabled{opacity:.45;cursor:not-allowed}
+.slots button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:380px){.steps{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style>
@@ -198,7 +203,7 @@ details.log summary{font-size:1.02rem}
     </div>
     <div id="paneMask" class="optgrid">
       <label class="field" for="speed"><span>Mask speed</span><input type="range" id="speed" min="1" max="255" value="20"><output id="speedOut" for="speed">20</output></label>
-      <p class="hint">The mask keeps looping after you disconnect. The speed number is the mask's own setting; try a few values.</p>
+      <p class="hint">Speed changes reach the mask as you drag, so start the loop first and then drag until it looks right. If the frames don't change, drag far the other way. The mask keeps looping after you disconnect.</p>
       <button id="btnLoop" class="btn primary wide" data-needs-conn>Start loop on mask</button>
     </div>
     <div id="panePhone" class="optgrid" hidden>
@@ -207,6 +212,10 @@ details.log summary{font-size:1.02rem}
       <button id="btnLive" class="btn primary wide" data-needs-conn>Start playing</button>
     </div>
     <p id="playStatus" class="status" aria-live="polite"></p>
+    <div class="optgrid">
+      <span class="lbl-sm">Show one stored frame</span>
+      <div id="slotRow" class="slots"></div>
+    </div>
     <button id="btnCheck" class="linkbtn" data-needs-conn>Ask the mask how many custom images it holds</button>
   </section>
 
@@ -524,7 +533,7 @@ async function sendFrames() {
       await uploadFrame(frames[f].payload, (p, t) => setProgress(f + p / t, n, `Frame ${f + 1} of ${n} · packet ${p}/${t}`));
       log(`Frame ${f + 1}/${n} stored`);
     }
-    $('onMask').value = n; store.set('onMask', n);
+    $('onMask').value = n; store.set('onMask', n); drawSlots();
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     setProgress(n, n, `Done · ${n} frame${n > 1 ? 's' : ''} in ${secs}s`);
     status(`${n} frame${n > 1 ? 's are' : ' is'} on the mask. Choose how to play ${n > 1 ? 'them' : 'it'} below.`, 'ok');
@@ -548,6 +557,8 @@ async function loopOnMask() {
     const w = expect('PLAYOK', 2500);
     await sendCmd('PLAY', [n, ...Array.from({ length: n }, (_, i) => i + 1)]);
     const ok = await w;
+    await sleep(150);
+    await sendCmd('SPEED', [+$('speed').value]);
     if (ok || st.blind) status(`Looping ${n} frame${n > 1 ? 's' : ''} on the mask. You can disconnect now.`, 'ok');
     else status(n > 10 ? 'The mask didn’t confirm. It may only loop 10 frames at once; try 10 or fewer, or use Drive from phone.' : 'Sent, but the mask didn’t confirm. Check the log.', 'warn');
   } catch (e) { fail(e, 'Play failed'); }
@@ -759,7 +770,24 @@ document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('c
   if (!phone) stopLive();
 }));
 $('speed').value = store.get('speed', 20); $('speedOut').textContent = $('speed').value;
-$('speed').addEventListener('input', () => { $('speedOut').textContent = $('speed').value; store.set('speed', +$('speed').value); });
+let speedT;
+$('speed').addEventListener('input', () => {
+  $('speedOut').textContent = $('speed').value; store.set('speed', +$('speed').value);
+  clearTimeout(speedT); speedT = setTimeout(() => { if (st.connected && !st.busy) sendCmd('SPEED', [+$('speed').value]).catch(e => fail(e)); }, 200);
+});
+
+function drawSlots() {
+  const row = $('slotRow'); row.textContent = '';
+  const n = onMaskCount() || MAX_FRAMES;
+  for (let i = 1; i <= n; i++) {
+    const b = document.createElement('button');
+    b.textContent = i; b.setAttribute('aria-label', 'Show stored frame ' + i); b.dataset.needsConn = '';
+    b.disabled = !st.connected || st.busy;
+    b.addEventListener('click', () => { stopLive(); sendCmd('PLAY', [1, i]).then(() => status('Showing stored frame ' + i + '.', 'ok')).catch(e => fail(e)); });
+    row.append(b);
+  }
+}
+$('onMask').addEventListener('change', drawSlots);
 $('fps').value = store.get('fps', 6); $('fpsOut').textContent = $('fps').value;
 $('fps').addEventListener('input', () => { $('fpsOut').textContent = $('fps').value; store.set('fps', +$('fps').value); });
 $('btnLoop').addEventListener('click', loopOnMask);
@@ -776,7 +804,7 @@ $('btnClearLog').addEventListener('click', () => { logLines.length = 0; $('log')
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawPreview);
 
 // ---------- start ----------
-sizePreview(); makeSample(); drawStrip(); drawPreview(); schedulePreview(); refreshUI(); checkEnv();
+sizePreview(); makeSample(); drawStrip(); drawPreview(); schedulePreview(); drawSlots(); refreshUI(); checkEnv();
 log('Ready. ' + (navigator.bluetooth ? 'Bluetooth API available.' : 'Bluetooth API not available in this browser.'));
 </script>
 </body>
