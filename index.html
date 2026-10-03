@@ -355,6 +355,7 @@ const st = {
   device: null, cmd: null, data: null, notify: null, connected: false, notifyOK: false,
   blind: false, datcp: null, busy: false, live: false, liveTimer: null, liveIdx: 0,
   waiters: [], queue: Promise.resolve(), wake: null, quietPlay: false,
+  anim: store.get('anim', false),
 };
 let frames = [];            // { src: canvas, rgba: Uint8ClampedArray, payload: Uint8Array }
 let isSample = false;
@@ -587,10 +588,27 @@ async function sendFrames() {
       if (left) log('Note: ' + left + ' old image' + (left === 1 ? '' : 's') + ' could not be deleted');
     }
     const before = await checkCount();
+    // Multi-frame set: announce the count first (MANY), send the frames, then close it (MANCPOK).
+    // Without this, each upload replaces the previous single image.
+    let many = false;
+    if (n > 1 && !st.blind) {
+      const w = expect('MANY', 3000);
+      await sendCmd('MANY', [n, 1]);
+      many = !!(await w);
+      log(many ? 'Mask accepted a ' + n + '-frame animation upload' : 'No reply to MANY; sending frames one by one');
+    }
     for (let f = 0; f < n; f++) {
       await uploadFrame(frames[f].payload, (p, t) => setProgress(f + p / t, n, `Frame ${f + 1} of ${n} · packet ${p}/${t}`));
       log(`Frame ${f + 1}/${n} stored`);
     }
+    if (many) {
+      const w = expect('MANC', 8000);
+      await sendCmd('MANCPOK');
+      await w;
+      await sendCmd('SPEED', [+$('speed').value]);
+      await sendCmd('PLAY');
+    }
+    st.anim = many; store.set('anim', many);
     const after = await checkCount();
     // The mask appends, so new frames land just after whatever it already held.
     const guess = Math.min(MAX_SLOT, after !== null ? Math.max(1, after - n + 1) : (before !== null ? before + 1 : 1));
@@ -599,7 +617,9 @@ async function sendFrames() {
     log(`Frames likely in slots ${guess}–${guess + n - 1}` + (after !== null ? ` (mask reports ${after} images)` : ''));
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     setProgress(n, n, `Done · ${n} frame${n > 1 ? 's' : ''} in ${secs}s`);
-    status(`${n} frame${n > 1 ? 's' : ''} sent. Likely in slots ${guess}–${guess + n - 1}. If the loop shows the wrong images, tap the slot buttons below to find them, then set "Starting at slot".`, 'ok');
+    status(many
+      ? `${n} frames sent as one animation and playing on the mask. Drag "Mask speed" to adjust. "Start loop on mask" replays it.`
+      : `${n} frame${n > 1 ? 's' : ''} sent. Likely in slots ${guess}–${guess + n - 1}. If the loop shows the wrong images, tap the slot buttons below to find them, then set "Starting at slot".`, 'ok');
   } catch (e) {
     fail(e, 'Upload stopped');
     setProgress(0, 1, 'Upload stopped. Reconnect if needed, then send again.');
@@ -615,6 +635,12 @@ async function loopOnMask() {
   const n = onMaskCount(); if (!n) { status('Send frames first, or set how many frames are already on the mask.', 'warn'); return; }
   stopLive();
   try {
+    if (st.anim) {
+      await sendCmd('SPEED', [+$('speed').value]);
+      await sendCmd('PLAY');
+      status('Playing the stored animation on the mask. You can disconnect now.', 'ok');
+      return;
+    }
     await sendCmd('SPEED', [+$('speed').value]);
     const w = expect('PLAYOK', 2500);
     const slots = slotList();
