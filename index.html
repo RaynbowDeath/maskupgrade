@@ -115,6 +115,9 @@ details.log summary{font-size:1.02rem}
 .slots button{min-width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:700 16px var(--font-mono);cursor:pointer}
 .slots button:disabled{opacity:.45;cursor:not-allowed}
 .slots button[aria-current="true"]{border-color:var(--accent);color:var(--accent)}
+.field-col{display:grid;gap:6px}
+.field-col>span{font-size:14px;font-weight:600}
+input[type=text]{font:600 15px var(--font-mono);width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .slots button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:380px){.steps{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
@@ -199,6 +202,8 @@ details.log summary{font-size:1.02rem}
     <h2>2 · Play</h2>
     <label class="field" for="onMask"><span>Frames on the mask</span><span></span><input type="number" id="onMask" min="1" max="20" value="0"></label>
     <label class="field" for="firstSlot"><span>Starting at slot</span><span></span><input type="number" id="firstSlot" min="1" max="40" value="1"></label>
+    <label class="field-col" for="loopSlots"><span>Slots to loop, in order</span><input type="text" id="loopSlots" inputmode="text" autocomplete="off" placeholder="e.g. 3, 5, 6, 9 or 3-6"></label>
+    <p class="hint" id="loopSlotsHint">Optional. When filled in, this list is used instead of the two boxes above. Ranges like 3-6 and repeats are fine.</p>
     <div class="seg" role="radiogroup" aria-label="Playback">
       <label><input type="radio" name="mode" value="mask" checked>Loop on the mask</label>
       <label><input type="radio" name="mode" value="phone">Drive from phone</label>
@@ -217,7 +222,9 @@ details.log summary{font-size:1.02rem}
     <div class="optgrid">
       <span class="lbl-sm">Find your frames</span>
       <div id="slotRow" class="slots"></div>
-      <p class="hint">Each button shows that stored slot on the mask. Tap through to find your frames, then set "Frames on the mask" and "Starting at slot" to match and loop.</p>
+      <label class="check"><input type="checkbox" id="tapAdds">Tapping a slot also adds it to "Slots to loop"</label>
+      <p class="hint">Each button shows that stored slot on the mask. Highlighted buttons are the slots that will loop.</p>
+      <button id="btnClearList" class="linkbtn">Clear "Slots to loop"</button>
     </div>
     <button id="btnCheck" class="linkbtn" data-needs-conn>Ask the mask how many custom images it holds</button>
   </section>
@@ -532,7 +539,22 @@ async function clearAll(onStep) {
 }
 
 function firstSlot() { return Math.max(1, Math.min(MAX_SLOT, parseInt($('firstSlot').value, 10) || 1)); }
+// "3, 5, 6, 9" or "3-6, 9" -> [3,5,6,9] / [3,4,5,6,9]; capped at 20 entries.
+function parseSlots(text) {
+  const out = [];
+  for (const part of String(text || '').replace(/\s*-\s*/g, '-').split(/[\s,;]+/)) {
+    const r = part.match(/^(\d+)-(\d+)$/);
+    if (r) {
+      const a = +r[1], b = +r[2], step = a <= b ? 1 : -1;
+      for (let k = a; out.length < MAX_FRAMES; k += step) { if (k >= 1 && k <= 255) out.push(k); if (k === b) break; }
+    } else if (/^\d+$/.test(part) && +part >= 1 && +part <= 255) out.push(+part);
+    if (out.length >= MAX_FRAMES) break;
+  }
+  return out.slice(0, MAX_FRAMES);
+}
 function slotList() {
+  const custom = parseSlots($('loopSlots').value);
+  if (custom.length) return custom;
   return Array.from({ length: onMaskCount() }, (_, i) => firstSlot() + i).filter(s => s <= 255);
 }
 
@@ -632,10 +654,10 @@ async function sendFrames() {
 function onMaskCount() { const n = Math.max(0, Math.min(MAX_FRAMES, parseInt($('onMask').value, 10) || 0)); return n; }
 
 async function loopOnMask() {
-  const n = onMaskCount(); if (!n) { status('Send frames first, or set how many frames are already on the mask.', 'warn'); return; }
+  const n = slotList().length; if (!n) { status('Fill in "Slots to loop", or set "Frames on the mask" and "Starting at slot".', 'warn'); return; }
   stopLive();
   try {
-    if (st.anim) {
+    if (st.anim && !parseSlots($('loopSlots').value).length) {
       await sendCmd('SPEED', [+$('speed').value]);
       await sendCmd('PLAY');
       status('Playing the stored animation on the mask. You can disconnect now.', 'ok');
@@ -648,13 +670,13 @@ async function loopOnMask() {
     const ok = await w;
     await sleep(150);
     await sendCmd('SPEED', [+$('speed').value]);
-    if (ok || st.blind) status(`Looping ${n} frame${n > 1 ? 's' : ''} on the mask. You can disconnect now.`, 'ok');
+    if (ok || st.blind) status(`Looping slot${n > 1 ? 's' : ''} ${slots.join(', ')} on the mask. You can disconnect now.`, 'ok');
     else status(n > 10 ? 'The mask didn’t confirm. It may only loop 10 frames at once; try 10 or fewer, or use Drive from phone.' : 'Sent, but the mask didn’t confirm. Check the log.', 'warn');
   } catch (e) { fail(e, 'Play failed'); }
 }
 
 function startLive() {
-  const n = onMaskCount(); if (!n) { status('Send frames first, or set how many frames are already on the mask.', 'warn'); return; }
+  const n = slotList().length; if (!n) { status('Fill in "Slots to loop", or set "Frames on the mask" and "Starting at slot".', 'warn'); return; }
   st.live = true; st.liveIdx = 0; st.quietPlay = true; keepAwake(true); refreshUI();
   status(`Playing ${n} frame${n > 1 ? 's' : ''} from the phone.`, 'ok');
   log('Live playback started:', n, 'frames at', $('fps').value, 'fps');
@@ -868,17 +890,30 @@ $('speed').addEventListener('input', () => {
 
 function drawSlots() {
   const row = $('slotRow'); row.textContent = '';
-  const probeMax = Math.min(MAX_SLOT, Math.max(30, lastCount || 0, firstSlot() + onMaskCount() - 1));
+  const looping = new Set(slotList());
+  const probeMax = Math.min(MAX_SLOT, Math.max(30, lastCount || 0, ...looping));
   for (let i = 1; i <= probeMax; i++) {
     const b = document.createElement('button');
     b.textContent = i; b.setAttribute('aria-label', 'Show stored image ' + i); b.dataset.needsConn = '';
     b.disabled = !st.connected || st.busy;
-    if (onMaskCount() && i >= firstSlot() && i < firstSlot() + onMaskCount()) b.setAttribute('aria-current', 'true');
-    b.addEventListener('click', () => { stopLive(); sendCmd('PLAY', [1, i]).then(() => status('Showing the image in slot ' + i + '.', 'ok')).catch(e => fail(e)); });
+    if (looping.has(i)) b.setAttribute('aria-current', 'true');
+    b.addEventListener('click', () => {
+      stopLive();
+      if ($('tapAdds').checked) {
+        const list = parseSlots($('loopSlots').value);
+        if (list.length < MAX_FRAMES) { list.push(i); $('loopSlots').value = list.join(', '); store.set('loopSlots', $('loopSlots').value); drawSlots(); }
+      }
+      sendCmd('PLAY', [1, i]).then(() => status('Showing the image in slot ' + i + '.', 'ok')).catch(e => fail(e));
+    });
     row.append(b);
   }
 }
 $('onMask').addEventListener('change', drawSlots);
+$('loopSlots').value = store.get('loopSlots', '');
+$('loopSlots').addEventListener('input', () => { store.set('loopSlots', $('loopSlots').value); drawSlots(); });
+$('tapAdds').checked = store.get('tapAdds', false);
+$('tapAdds').addEventListener('change', () => store.set('tapAdds', $('tapAdds').checked));
+$('btnClearList').addEventListener('click', () => { $('loopSlots').value = ''; store.set('loopSlots', ''); drawSlots(); });
 $('firstSlot').value = store.get('firstSlot', 1);
 $('firstSlot').addEventListener('change', () => { store.set('firstSlot', parseInt($('firstSlot').value, 10) || 1); drawSlots(); });
 $('fps').value = store.get('fps', 6); $('fpsOut').textContent = $('fps').value;
